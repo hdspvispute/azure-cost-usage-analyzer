@@ -1,0 +1,27 @@
+{
+  "project": "Azure Cost & Usage Analyzer",
+  "version": "0.1",
+  "stack": {
+    "language": "Python",
+    "version": "3.11+",
+    "ui": "Streamlit",
+    "auth": "DefaultAzureCredential"
+  },
+  "features": [],
+  "assumptions": [
+    "User has az login configured with Reader access to target subscriptions",
+    "App runs locally or in Azure Container Apps",
+    "Azure Cost Management API is enabled for the subscription"
+  ],
+  "limits": [
+    "Cost data shows last 30 days only",
+    "No write operations — read-only Azure access required",
+    "No multi-tenant support in v1"
+  ],
+  "out_of_scope": [
+    "Budget alerts or cost forecasting",
+    "Exporting cost data to CSV or Excel",
+    "Multi-tenant or cross-tenant access",
+    "Real-time cost monitoring"
+  ]
+}
