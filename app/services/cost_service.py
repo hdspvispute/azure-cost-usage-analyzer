@@ -22,9 +22,14 @@ class CostService:
         Returns:
             dict with keys: total_cost, by_service, by_resource_type, top_drivers, is_mock
         """
-        result = self.cost_client.get_resource_group_cost(
-            self.subscription_id, resource_group_name
-        )
+        try:
+            result = self.cost_client.get_resource_group_cost(
+                self.subscription_id, resource_group_name
+            )
+        except Exception as e:
+            logger.error(f"Cost client raised exception: {str(e)}", exc_info=True)
+            logger.warning("Cost client error; using mock fallback.")
+            return get_mock_cost_data(is_fallback=True)
 
         if result is None or not result.rows:
             logger.warning("Cost data unavailable or empty; using mock fallback.")

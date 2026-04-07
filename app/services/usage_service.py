@@ -21,7 +21,12 @@ class UsageService:
         Returns:
             dict with keys: total_count, by_type, resources, is_mock
         """
-        resources = self.resource_client.list_resources_in_group(resource_group_name)
+        try:
+            resources = self.resource_client.list_resources_in_group(resource_group_name)
+        except Exception as e:
+            logger.error(f"Resource client raised exception: {str(e)}", exc_info=True)
+            logger.warning("Resource list unavailable; using mock fallback.")
+            return get_mock_usage_data(is_fallback=True)
 
         if resources is None:
             logger.warning("Resource list unavailable; using mock fallback.")
