@@ -2,29 +2,25 @@ import logging
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from app.services.cost_service import CostService
 
 logger = logging.getLogger(__name__)
 
 
-def render_cost_tab(credential, subscription_id, resource_group_name):
+def render_cost_tab(summary, resource_group_names):
     """
     Render the Cost tab: total cost, by-service chart, top resources table.
 
     Args:
-        credential: DefaultAzureCredential instance (or None).
-        subscription_id: Selected Azure subscription ID.
-        resource_group_name: Selected resource group name.
+        summary: Preloaded cost summary dict.
+        resource_group_names: Selected resource group names.
     """
     st.subheader("💰 Cost Analysis — Last 30 Days")
     st.caption("ℹ️ Cost data from Azure may be delayed up to 48 hours.")
+    st.caption(f"Selected resource groups: {', '.join(resource_group_names)}")
 
-    if not subscription_id or not resource_group_name:
-        st.info("Select a subscription and resource group from the sidebar to view cost data.")
+    if not resource_group_names:
+        st.info("Select at least one resource group from the sidebar to view cost data.")
         return
-
-    with st.spinner("Loading cost data..."):
-        summary = _fetch_cost_summary(credential, subscription_id, resource_group_name)
 
     if summary is None:
         st.error("Unable to load cost data. Please try again.")
@@ -36,16 +32,6 @@ def render_cost_tab(credential, subscription_id, resource_group_name):
     _render_total_cost(summary)
     _render_by_service_chart(summary)
     _render_top_drivers_table(summary)
-
-
-def _fetch_cost_summary(credential, subscription_id, resource_group_name):
-    """Fetch cost summary from service layer, return None on unexpected failure."""
-    try:
-        service = CostService(credential, subscription_id)
-        return service.get_cost_summary(resource_group_name)
-    except Exception as e:
-        logger.error(f"Unexpected error fetching cost summary: {str(e)}", exc_info=True)
-        return None
 
 
 def _render_total_cost(summary):

@@ -1,8 +1,8 @@
 import logging
 import streamlit as st
-from app.azure.subscription_client import AzureSubscriptionClient
-from app.azure.resource_client import ResourceClient
-from app.azure.mock_data import get_mock_subscriptions, get_mock_resource_groups
+from app.azure_api.subscription_client import AzureSubscriptionClient
+from app.azure_api.resource_client import ResourceClient
+from app.azure_api.mock_data import get_mock_subscriptions, get_mock_resource_groups
 
 logger = logging.getLogger(__name__)
 
@@ -15,15 +15,38 @@ def render_sidebar(credential):
         credential: DefaultAzureCredential instance (or None if auth failed).
 
     Returns:
-        tuple: (subscription_id, resource_group_name) — both may be None if not yet selected.
+        tuple: (subscription_id, selected_resource_groups, refresh_requested)
     """
     st.sidebar.title("🔍 Azure Cost & Usage Analyzer")
     st.sidebar.markdown("---")
+    _render_auth_controls()
 
-    subscription_id, subscription_name = _render_subscription_selector(credential)
-    resource_group_name = _render_resource_group_selector(credential, subscription_id)
+    subscription_id, _ = _render_subscription_selector(credential)
+    selected_resource_groups = _render_resource_group_selector(credential, subscription_id)
+    refresh_requested = st.sidebar.button("🔄 Refresh from Azure", key="refresh_from_azure")
 
-    return subscription_id, resource_group_name
+    return subscription_id, selected_resource_groups, refresh_requested
+
+
+def _render_auth_controls():
+    """Render Azure authentication status and guidance."""
+    st.sidebar.subheader("Azure Session")
+
+    is_logged_in = bool(st.session_state.get("azure_auth_ok", False))
+    account_text = st.session_state.get("azure_auth_source", "")
+
+    if is_logged_in:
+        st.sidebar.success(f"Authenticated via: {account_text}")
+    else:
+        st.sidebar.warning("Azure credential is not currently authenticated.")
+
+    st.sidebar.caption(
+        "For local dev, run 'az login' in your terminal. In Azure Container Apps, configure a managed identity with Reader access."
+    )
+    if st.sidebar.button("Re-check authentication", key="recheck_auth"):
+        st.rerun()
+
+    st.sidebar.markdown("---")
 
 
 def _render_subscription_selector(credential):
@@ -38,32 +61,39 @@ def _render_subscription_selector(credential):
 
     options = {sub["display_name"]: sub["subscription_id"] for sub in subscriptions}
     selected_name = st.sidebar.selectbox(
-        "Select subscription", list(options.keys()), key="subscription_selector"
+        "Select subscription",
+        list(options.keys()),
+        key="subscription_selector",
+        index=None,
+        placeholder="Choose a subscription...",
     )
+    if not selected_name:
+        return None, None
     selected_id = options[selected_name]
     logger.info(f"Subscription selected: {selected_name}")
     return selected_id, selected_name
 
 
 def _render_resource_group_selector(credential, subscription_id):
-    """Render resource group dropdown. Returns resource_group_name or None."""
+    """Render multi-select resource group control. Returns selected RG list."""
     st.sidebar.subheader("Resource Group")
 
     if not subscription_id:
         st.sidebar.info("Select a subscription first.")
-        return None
+        return []
 
     resource_groups = _load_resource_groups(credential, subscription_id)
 
     if not resource_groups:
         st.sidebar.info("No resource groups found in this subscription.")
-        return None
+        return []
 
-    selected_rg = st.sidebar.selectbox(
-        "Select resource group", resource_groups, key="rg_selector"
+    selected_rgs = st.sidebar.multiselect(
+        "Select one or more resource groups", resource_groups, key="rg_selector"
     )
-    logger.info(f"Resource group selected: {selected_rg}")
-    return selected_rg
+    if selected_rgs:
+        logger.info("Resource groups selected: %s", ", ".join(selected_rgs))
+    return selected_rgs
 
 
 def _load_subscriptions(credential):

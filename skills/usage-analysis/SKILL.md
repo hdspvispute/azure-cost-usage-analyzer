@@ -5,9 +5,9 @@ Guidance for implementing resource listing and usage analysis in Azure Cost & Us
 ## When to Use This Skill
 
 Reference this skill when:
-- Implementing the resource listing module (`app/azure/resource_client.py`)
+- Implementing the resource listing module (`app/azure_api/resource_client.py`)
 - Writing business logic to group and count resources by type (`app/services/usage_service.py`)
-- Building the usage tab UI in Streamlit (`app/ui/usage_page.py` or similar)
+- Building the usage tab UI in Streamlit (`app/ui/usage_tab.py` or similar)
 - Adding resource listing error handling and fallback behavior
 - Writing tests for resource enumeration functions
 - Troubleshooting resource API calls or grouping logic
@@ -15,7 +15,7 @@ Reference this skill when:
 ## Tech Context
 
 - **Azure SDK**: `azure-mgmt-resource` (ResourceManagementClient)
-- **Scope**: Resource group level — list all resources in a single resource group
+- **Scope**: Resource group level — list all resources for one or more selected resource groups
 - **Required data**:
   - Resource name, type, location, provisioning state
   - Grouped counts by resource type
@@ -24,7 +24,7 @@ Reference this skill when:
 
 ## Rules
 
-1. **All Azure Resource Management API calls must be in `app/azure/resource_client.py` only** — never call the Azure SDK from service or UI layers.
+1. **All Azure Resource Management API calls must be in `app/azure_api/resource_client.py` only** — never call the Azure SDK from service or UI layers.
 
 2. **Business logic (counting by type, grouping, sorting) must be in `app/services/usage_service.py`** — resource_client.py is a thin wrapper around the SDK; all transformations happen in services.
 
@@ -32,7 +32,7 @@ Reference this skill when:
 
 4. **Always handle empty resource groups without crashing** — if a resource group contains zero resources, return an empty/zero summary instead of failing; show a friendly "no resources found" message in the UI.
 
-5. **If API call fails for any reason (network timeout, permission denied, service error), fall back to mock data** — import from `app/azure/mock_data.py` and log a warning indicating the fallback reason.
+5. **If API call fails for any reason (network timeout, permission denied, service error), fall back to mock data** — import from `app/azure_api/mock_data.py` and log a warning indicating the fallback reason.
 
 6. **Log all API calls and their response status using Python logging** — use `logger.info()` for successful calls and `logger.warning()` or `logger.error()` for failures; omit sensitive identifiers from logs.
 
@@ -41,7 +41,7 @@ Reference this skill when:
 ## Implementation Pattern
 
 ```python
-# app/azure/resource_client.py
+# app/azure_api/resource_client.py
 import logging
 from azure.mgmt.resource import ResourceManagementClient
 from azure.core.exceptions import AzureError
@@ -88,8 +88,8 @@ class ResourceClient:
 
 # app/services/usage_service.py
 import logging
-from app.azure.resource_client import ResourceClient
-from app.azure.mock_data import get_mock_usage_data
+from app.azure_api.resource_client import ResourceClient
+from app.azure_api.mock_data import get_mock_usage_data
 
 logger = logging.getLogger(__name__)
 
@@ -166,7 +166,7 @@ class UsageService:
         }
 
 
-# app/ui/usage_page.py (Streamlit example)
+# app/ui/usage_tab.py (Streamlit example)
 import streamlit as st
 from app.services.usage_service import UsageService
 
@@ -235,7 +235,7 @@ When mock fallback is triggered, `is_mock` is set to `True` and the UI displays 
 
 | Mistake | Fix |
 |---|---|
-| Calling `ResourceManagementClient` directly from Streamlit pages | Create a thin wrapper in `app/azure/resource_client.py` and call service layer (`app/services/usage_service.py`) from UI only. |
+| Calling `ResourceManagementClient` directly from Streamlit pages | Create a thin wrapper in `app/azure_api/resource_client.py` and call service layer (`app/services/usage_service.py`) from UI only. |
 | Not handling empty resource groups — assuming resources exist and crashing if zero | Check if resource list is empty and return graceful empty summary; show "No resources found" in UI. |
 | Forgetting to sort resource type counts before returning to UI | Always return `by_type` sorted descending by count; do this in `_process_resources()` so UI gets pre-sorted data. |
 | Storing full resource objects in memory without pagination for large RGs | For resource groups with thousands of resources, convert iterator to list carefully; consider adding pagination/batching if needed later. |

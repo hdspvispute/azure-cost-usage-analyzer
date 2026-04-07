@@ -2,28 +2,34 @@
 
 ## 1. Core Features
 - **Azure authentication via Azure CLI**: Users sign in with existing `az login` session through `DefaultAzureCredential`; no manual token entry and no hardcoded credentials.
+- **Authentication status panel**: App shows current Azure credential status and guidance for local CLI auth vs Container Apps managed identity.
 - **Subscription selector**: App displays a dropdown of subscriptions the authenticated user can access.
-- **Resource group selector**: After subscription selection, app displays a dropdown of resource groups filtered to that subscription.
-- **Cost tab (last 30 days)**: App shows total spend for the selected resource group, plus breakdown by service and resource type, including top 5 cost drivers.
-- **Usage tab**: App shows resource inventory summary for the selected resource group, including counts grouped by resource type.
+- **Multi-select resource groups**: After subscription selection, app displays a multi-select list of resource groups filtered to that subscription.
+- **Cost tab (last 30 days)**: App shows aggregated total spend for selected resource groups, plus breakdown by service and resource type, including top 5 cost drivers.
+- **Usage tab**: App shows aggregated resource inventory summary for selected resource groups, including counts grouped by resource type.
+- **SQLite local cache**: App stores cost/usage snapshots in local SQLite DB and loads cached data by default.
+- **Manual refresh from Azure**: User can explicitly refresh live data from Azure; app updates cache and displays last refreshed timestamp.
 
 ## 2. User Flow
 1. User opens the Streamlit application.
-2. App initializes authentication using `DefaultAzureCredential` and existing Azure CLI login context.
+2. App initializes authentication using `DefaultAzureCredential` and validates Azure Management token acquisition.
 3. User selects a subscription from the subscription dropdown.
 4. App loads and displays resource groups for the selected subscription.
-5. User selects a resource group.
-6. App loads cost data for the selected resource group (last 30 days) and displays total cost and top cost drivers.
-7. App loads usage data for the selected resource group and displays resource counts by type.
-8. If data is unavailable or access is limited, app shows a clear, user-friendly message.
+5. User selects one or more resource groups.
+6. App checks local SQLite cache for selected subscription + resource group set.
+7. If cached snapshot exists and user has not requested refresh, app renders cached data and shows last refreshed timestamp.
+8. If user clicks refresh (or cache is missing), app fetches from Azure, updates cache, and renders latest data.
+9. If data is unavailable or access is limited, app shows a clear, user-friendly message and marks output as mock fallback.
 
 ## 3. Scope (v1)
-- Read-only Azure cost and usage analysis for a single selected subscription and resource group.
+- Read-only Azure cost and usage analysis for a single selected subscription and one or more selected resource groups.
 - Authentication using Azure CLI and `DefaultAzureCredential` only.
 - Cost insights limited to the last 30 days.
-- Cost breakdown by service and resource type, including top 5 cost drivers.
-- Usage summary showing resource counts by type.
+- Cost breakdown by service and resource type, including top 5 cost drivers, aggregated across selected resource groups.
+- Usage summary showing resource counts by type, aggregated across selected resource groups.
+- Local SQLite cache with manual refresh behavior.
 - Local execution via Streamlit for developers, DevOps, and FinOps users.
+- Optional Playwright UI E2E smoke tests for rendered dashboard behavior.
 
 ## 4. Out of Scope (v1)
 - No budget alerts or budget policy enforcement.

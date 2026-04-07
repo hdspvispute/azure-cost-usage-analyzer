@@ -29,7 +29,7 @@ costs and usage by resource group. Users authenticate via Azure CLI (az login).
 - Follow the structure in docs/architecture.md
 - UI logic belongs in app/ui/
 - Business logic belongs in app/services/
-- Azure API integration belongs in app/azure/
+- Azure API integration belongs in app/azure_api/
 - Keep concerns separated — UI must not call Azure APIs directly
 
 ### Testing

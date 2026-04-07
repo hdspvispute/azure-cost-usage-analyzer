@@ -1,6 +1,6 @@
 import logging
-from app.azure.resource_client import ResourceClient
-from app.azure.mock_data import get_mock_usage_data
+from app.azure_api.resource_client import ResourceClient
+from app.azure_api.mock_data import get_mock_usage_data
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +44,41 @@ class UsageService:
             logger.error(f"Error processing resource list: {str(e)}", exc_info=True)
             logger.warning("Processing failed; falling back to mock data.")
             return get_mock_usage_data(is_fallback=True)
+
+    def get_resource_group_usage_for_groups(self, resource_group_names):
+        """Return usage summary aggregated across selected resource groups."""
+        if not resource_group_names:
+            return {"total_count": 0, "by_type": {}, "resources": [], "is_mock": False}
+
+        aggregate_counts = {}
+        aggregate_resources = []
+        has_live_data = False
+
+        for resource_group_name in resource_group_names:
+            summary = self.get_resource_group_usage(resource_group_name)
+            if summary.get("is_mock"):
+                continue
+
+            has_live_data = True
+            for resource_type, count in summary.get("by_type", {}).items():
+                aggregate_counts[resource_type] = aggregate_counts.get(resource_type, 0) + int(count)
+
+            for resource in summary.get("resources", []):
+                resource_copy = dict(resource)
+                resource_copy["resource_group"] = resource_group_name
+                aggregate_resources.append(resource_copy)
+
+        if not has_live_data:
+            logger.warning("No live usage data for selected resource groups; using mock fallback.")
+            return get_mock_usage_data(is_fallback=True)
+
+        sorted_types = dict(sorted(aggregate_counts.items(), key=lambda x: x[1], reverse=True))
+        return {
+            "total_count": len(aggregate_resources),
+            "by_type": sorted_types,
+            "resources": aggregate_resources,
+            "is_mock": False,
+        }
 
     def _process_resources(self, resources):
         """Aggregate resources by type (sorted descending) and build resource list."""

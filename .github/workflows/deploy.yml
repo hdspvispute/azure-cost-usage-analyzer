@@ -1,0 +1,67 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies and run tests
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-mock
+          pytest -q
+
+      - name: ACR login
+        run: az acr login --name ${{ vars.AZURE_ACR_NAME }}
+
+      - name: Build and push image
+        run: |
+          IMAGE=${{ vars.AZURE_ACR_LOGIN_SERVER }}/cost-analyzer:${{ github.sha }}
+          docker build -t $IMAGE .
+          docker push $IMAGE
+          echo "IMAGE=$IMAGE" >> $GITHUB_ENV
+
+      - name: Deploy to Azure Container Apps
+        run: |
+          az containerapp create \
+            --name ${{ vars.AZURE_CONTAINER_APP_NAME }} \
+            --resource-group ${{ vars.AZURE_RESOURCE_GROUP }} \
+            --environment ${{ vars.AZURE_CONTAINERAPPS_ENVIRONMENT }} \
+            --image $IMAGE \
+            --system-assigned \
+            --ingress external \
+            --target-port 8501 \
+            --registry-server ${{ vars.AZURE_ACR_LOGIN_SERVER }} \
+            --registry-identity system \
+            --cpu 0.5 \
+            --memory 1.0Gi \
+            --min-replicas 0 \
+            --max-replicas 2 \
+          || az containerapp update \
+            --name ${{ vars.AZURE_CONTAINER_APP_NAME }} \
+            --resource-group ${{ vars.AZURE_RESOURCE_GROUP }} \
+            --image $IMAGE

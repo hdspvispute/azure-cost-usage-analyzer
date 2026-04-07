@@ -78,7 +78,7 @@ Alternatives considered: Azure App Service, Azure Functions, Azure VM.
 The app includes UI logic, business logic, and external API integration. Without separation, code becomes difficult to test, change, and maintain as features expand.
 
 **Decision**:
-Keep Azure API calls in app/azure, business logic in app/services, and UI logic in app/ui.
+Keep Azure API calls in app/azure_api, business logic in app/services, and UI logic in app/ui.
 
 **Consequences**:
 - Improves maintainability through clear boundaries and single responsibility.
@@ -86,3 +86,71 @@ Keep Azure API calls in app/azure, business logic in app/services, and UI logic 
 - Makes it easier to switch between live Azure clients and mock implementations.
 
 Alternatives considered: place most logic directly in Streamlit page files.
+
+## ADR-006: Data Access Mode — SQLite Cache First with Manual Refresh
+
+**Status**: Accepted
+
+**Context**:
+Users need predictable performance and control over when live Azure data is refreshed. Re-fetching from Azure on every UI interaction can increase latency and API noise.
+
+**Decision**:
+Use local SQLite as the default read source for selected subscription + resource group sets. Fetch live Azure data only when user clicks refresh, then persist refreshed snapshot and timestamp.
+
+**Consequences**:
+- Faster and more stable user experience on repeated views.
+- Clear user control over refresh behavior and data freshness.
+- Requires cache lifecycle handling and explicit UI indicators for last refreshed time and source.
+
+Alternatives considered: always-live Azure fetch on each selection, in-memory-only cache.
+
+## ADR-007: Resource Group Selection — Multi-Select Aggregation
+
+**Status**: Accepted
+
+**Context**:
+FinOps users often need a combined view of multiple resource groups in one subscription. Single resource group analysis limits usefulness.
+
+**Decision**:
+Support multi-select resource groups and aggregate cost/usage outputs across selected groups in services layer.
+
+**Consequences**:
+- Broader analysis scope for teams and environments.
+- More complex aggregation and caching key strategy.
+- UI must clearly display selected resource groups and aggregate context.
+
+Alternatives considered: single-select only, separate tabs per resource group.
+
+## ADR-008: Authentication UX — No In-App az login/logout Buttons
+
+**Status**: Accepted
+
+**Context**:
+In-app execution of az login/logout is unreliable in Streamlit server context and is not a valid model for Azure Container Apps production deployment.
+
+**Decision**:
+Use credential status + guidance in sidebar instead of invoking Azure CLI login/logout from the UI. Local authentication is performed in terminal (az login). Cloud authentication uses managed identity.
+
+**Consequences**:
+- Avoids false success/failure UI states caused by shell/process differences.
+- Aligns local and production deployment behavior with least operational surprise.
+- Requires clear documentation for local auth and managed identity RBAC setup.
+
+Alternatives considered: in-app CLI subprocess login/logout, embedded interactive browser/device code auth flow.
+
+## ADR-009: UI Test Strategy — Unit + Live + Playwright E2E
+
+**Status**: Accepted
+
+**Context**:
+Unit tests with mocks can pass while real Streamlit UI workflows still fail in browser.
+
+**Decision**:
+Use layered tests: unit tests for services/auth, optional live Azure contract tests, and optional Playwright UI smoke tests against a running Streamlit instance.
+
+**Consequences**:
+- Better confidence in real user-visible behavior.
+- Requires additional test dependencies and a running app endpoint for E2E.
+- E2E should remain smoke-level and opt-in to keep CI stable.
+
+Alternatives considered: unit-only strategy, manual-only UI verification.

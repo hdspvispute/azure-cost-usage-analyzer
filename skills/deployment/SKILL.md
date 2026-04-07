@@ -143,10 +143,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Azure Login
-        uses: azure/login@v1
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Build and push Docker image to ACR
         run: |
@@ -185,7 +187,9 @@ jobs:
 ```
 
 **Required GitHub Secrets:**
-- `AZURE_CREDENTIALS`: JSON object from `az ad sp create-for-rbac` (service principal with ACR push and Container Apps update permissions)
+- `AZURE_CLIENT_ID`: Entra app/client ID used by GitHub OIDC
+- `AZURE_TENANT_ID`: Azure tenant ID
+- `AZURE_SUBSCRIPTION_ID`: Azure subscription ID
 - `ACR_NAME`: Azure Container Registry name (e.g., `myacr`)
 - `ACR_LOGIN_SERVER`: ACR login server URL (e.g., `myacr.azurecr.io`)
 - `RESOURCE_GROUP`: Azure resource group name

@@ -1,0 +1,24 @@
+name: Context Guard
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate-context:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure required docs exist
+        run: |
+          test -f docs/requirements.md
+          test -f docs/architecture.md
+          test -f docs/nfr.md
+          test -f docs/decisions.md
+          test -f context/app_context.json
+
+      - name: Validate JSON structure
+        run: |
+          python -m json.tool context/app_context.json > /dev/null

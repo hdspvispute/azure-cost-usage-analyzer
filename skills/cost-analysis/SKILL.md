@@ -5,9 +5,9 @@ Guidance for implementing cost data retrieval and analysis in Azure Cost & Usage
 ## When to Use This Skill
 
 Reference this skill when:
-- Implementing the cost data retrieval module (`app/azure/cost_client.py`)
+- Implementing the cost data retrieval module (`app/azure_api/cost_client.py`)
 - Writing business logic to process and aggregate cost data (`app/services/cost_service.py`)
-- Building the cost tab UI in Streamlit (`app/ui/cost_page.py` or similar)
+- Building the cost tab UI in Streamlit (`app/ui/cost_tab.py` or similar)
 - Adding cost-related error handling and fallback behavior
 - Writing tests for cost data functions
 - Troubleshooting cost API calls or data transformations
@@ -26,7 +26,7 @@ Reference this skill when:
 
 ## Rules
 
-1. **All Azure Cost Management API calls must be in `app/azure/cost_client.py` only** — never call the Azure SDK from service or UI layers.
+1. **All Azure Cost Management API calls must be in `app/azure_api/cost_client.py` only** — never call the Azure SDK from service or UI layers.
 
 2. **Business logic (aggregation, sorting, filtering) must be in `app/services/cost_service.py`** — cost_client.py is a thin wrapper around the SDK; all transformations happen in services.
 
@@ -34,18 +34,18 @@ Reference this skill when:
 
 4. **Always handle the case where cost data is empty** — new resource groups may have no spend history; show a friendly message like "No cost data available for this resource group yet."
 
-5. **If any API call fails for any reason (network timeout, permission denied, rate limit, service unavailable), fall back to mock data** — import from `app/azure/mock_data.py` and log a warning indicating the fallback reason.
+5. **If any API call fails for any reason (network timeout, permission denied, rate limit, service unavailable), fall back to mock data** — import from `app/azure_api/mock_data.py` and log a warning indicating the fallback reason.
 
 6. **Log all API calls and their response status using Python logging** — use `logger.info()` for successful calls and `logger.warning()` or `logger.error()` for failures; omit sensitive data from logs.
 
-7. **Do not cache cost data between sessions** — fetch fresh data every time a user selects a resource group; cost data updates frequently and users expect current values.
+7. **Use cache-first reads with explicit refresh** — default to SQLite snapshot reads and fetch fresh Azure data only when user requests refresh.
 
 8. **Document in code and UI that cost data may be delayed up to 48 hours** — do not assume the returned data represents real-time spend; include a timestamp label if possible.
 
 ## Implementation Pattern
 
 ```python
-# app/azure/cost_client.py
+# app/azure_api/cost_client.py
 import logging
 from datetime import datetime, timedelta
 from azure.mgmt.costmanagement import CostManagementClient
@@ -115,8 +115,8 @@ class CostClient:
 
 # app/services/cost_service.py
 import logging
-from app.azure.cost_client import CostClient
-from app.azure.mock_data import get_mock_cost_data
+from app.azure_api.cost_client import CostClient
+from app.azure_api.mock_data import get_mock_cost_data
 
 logger = logging.getLogger(__name__)
 
@@ -184,7 +184,7 @@ class CostService:
         }
 
 
-# app/ui/cost_page.py (Streamlit example)
+# app/ui/cost_tab.py (Streamlit example)
 import streamlit as st
 from app.services.cost_service import CostService
 
@@ -246,7 +246,7 @@ When mock fallback is triggered, `is_mock` is set to `True` and the UI displays 
 
 | Mistake | Fix |
 |---|---|
-| Calling `CostManagementClient` directly from Streamlit pages | Create a thin wrapper in `app/azure/cost_client.py` and call service layer (`app/services/cost_service.py`) from UI only. |
+| Calling `CostManagementClient` directly from Streamlit pages | Create a thin wrapper in `app/azure_api/cost_client.py` and call service layer (`app/services/cost_service.py`) from UI only. |
 | Caching cost data across user sessions | Do not use `@st.cache_data` for cost queries; fetch fresh data every time resource group changes. |
 | Not handling empty cost datasets | Check if `result.rows` is empty or None; show a friendly "No cost data available" message instead of crashing. |
 | Forgetting to log API calls and failures | Log start/end of API calls with `logger.info()`; log failures with full exception context using `logger.error(exc_info=True)`. |

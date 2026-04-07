@@ -1,273 +1,93 @@
-json
 {
-  "project": "Azure Cost & Usage Analyzer (ACUA)",
-  "version": "0.1",
-  "description": "Python Streamlit application for analyzing Azure costs and resource usage by subscription and resource group. Authenticates via Azure CLI + DefaultAzureCredential, displays cost trends (last 30 days), usage summaries, and falls back to mock data when Azure APIs are unavailable.",
-  "outcome_statement": "ACUA enables developers and FinOps teams to quickly understand Azure spending by resource group without navigating the Azure Portal. Users can authenticate using existing Azure CLI credentials, select a subscription and resource group, and immediately see cost trends and resource inventory.",
-  
+  "project": "Azure Cost & Usage Analyzer",
+  "version": "0.2",
+  "description": "Streamlit app for Azure cost and usage insights with multi-resource-group aggregation and SQLite cache-first reads.",
   "stack": {
     "language": "Python",
     "version": "3.11+",
-    "ui": "Streamlit (port 8501)",
-    "auth": "DefaultAzureCredential (Azure CLI locally, managed identity in Container Apps)",
-    "deployment": "Docker → Azure Container Registry → Azure Container Apps",
-    "cicd": "GitHub Actions (test → build → deploy)",
-    "testing": "pytest with mocked Azure SDK calls",
-    "logging": "Python logging (not print statements)",
-    "packages": {
-      "runtime": {
-        "streamlit": "latest",
-        "pandas": "for data aggregation",
-        "plotly": "optional, for charting",
-        "azure-identity": "for DefaultAzureCredential",
-        "azure-mgmt-costmanagement": "for Cost Management API",
-        "azure-mgmt-resource": "for Resource Management API",
-        "azure-mgmt-subscription": "for Subscription API"
-      },
-      "dev": {
-        "pytest": "for unit tests",
-        "pytest-mock": "for mocking Azure SDK"
-      }
+    "ui": "Streamlit",
+    "auth": "DefaultAzureCredential",
+    "azure_sdks": [
+      "azure-identity",
+      "azure-mgmt-costmanagement",
+      "azure-mgmt-resource",
+      "azure-mgmt-subscription"
+    ],
+    "storage": "SQLite"
+  },
+  "features": [
+    {
+      "id": "auth-status",
+      "name": "Azure Authentication Status",
+      "description": "Show auth status and guidance for Azure CLI local auth vs managed identity in cloud",
+      "status": "implemented"
+    },
+    {
+      "id": "subscription-selector",
+      "name": "Subscription Selector",
+      "description": "Dropdown showing subscriptions the user can access",
+      "status": "implemented"
+    },
+    {
+      "id": "resource-group-multiselect",
+      "name": "Resource Group Multi-Select",
+      "description": "Select one or more resource groups within selected subscription",
+      "status": "implemented"
+    },
+    {
+      "id": "cost-analysis",
+      "name": "Cost Tab",
+      "description": "Aggregated total spend for last 30 days with breakdown by service and resource type",
+      "status": "implemented"
+    },
+    {
+      "id": "usage-analysis",
+      "name": "Usage Tab",
+      "description": "Aggregated resource counts by type for selected resource groups",
+      "status": "implemented"
+    },
+    {
+      "id": "cache-first-data",
+      "name": "SQLite Cache-First Reads",
+      "description": "Load cached snapshots by default and refresh live data on explicit user request",
+      "status": "implemented"
     }
-  },
-
-  "features": {
-    "v1": [
-      {
-        "id": "auth",
-        "name": "Azure Authentication",
-        "description": "Authenticate using DefaultAzureCredential with existing Azure CLI login — no manual token entry, no hardcoded credentials",
-        "status": "planned",
-        "implements": "ADR-002",
-        "skill": "skills/azure-auth/SKILL.md"
-      },
-      {
-        "id": "subscription-selector",
-        "name": "Subscription Selector",
-        "description": "Interactive dropdown showing all subscriptions the authenticated user has Reader access to; filters resource group options",
-        "status": "planned",
-        "api": "SubscriptionClient.list_subscriptions"
-      },
-      {
-        "id": "resource-group-selector",
-        "name": "Resource Group Selector",
-        "description": "Interactive dropdown of resource groups filtered to the selected subscription",
-        "status": "planned",
-        "api": "ResourceManagementClient.resource_groups.list"
-      },
-      {
-        "id": "cost-analysis",
-        "name": "Cost Tab",
-        "description": "Total spend for last 30 days, breakdown by Azure service and resource type, top 5 cost drivers",
-        "status": "planned",
-        "scope": "last 30 days only (fixed in v1)",
-        "api": "CostManagementClient.query.usage",
-        "skill": "skills/cost-analysis/SKILL.md"
-      },
-      {
-        "id": "usage-analysis",
-        "name": "Usage Tab",
-        "description": "Resource inventory for selected resource group: total count and breakdown by resource type",
-        "status": "planned",
-        "api": "ResourceManagementClient.resources.list_by_resource_group",
-        "skill": "skills/usage-analysis/SKILL.md"
-      }
-    ]
-  },
-
+  ],
   "nfr": {
-    "security": {
-      "requirements": [
-        "Authentication must use Azure CLI with DefaultAzureCredential only",
-        "No credentials, API keys, secrets, subscription IDs, or tenant IDs may be hardcoded in source files",
-        "No real credentials stored in .env files or other tracked configuration files",
-        "Dependencies must be limited to approved packages in requirements.txt",
-        "Authorization is read-only: app requires Reader role and must not perform write operations"
-      ],
-      "verification": "Repository scan for sensitive patterns (password, secret, tenant, subscription), code review of auth modules, .gitignore validation, dependency review in CI"
-    },
-    "performance": {
-      "requirements": [
-        "Initial page load completes in under 5 seconds on standard developer machine",
-        "Subscription list loads in under 3 seconds after authentication",
-        "Cost data for selected resource group loads in under 10 seconds",
-        "Redundant API calls avoided via session-level caching of subscriptions and resource groups"
-      ],
-      "verification": "Elapsed time measurement (minimum 5 runs), response time instrumentation in logs, median validation across 10+ runs, request logging to confirm no duplicate API calls per session"
-    },
-    "reliability": {
-      "requirements": [
-        "Empty cost data returns friendly no-data message, app continues running",
-        "No accessible subscriptions shows friendly message instead of error",
-        "Azure API failures (network, rate limit, permission) fall back to mock data with clear mock label",
-        "Empty resource groups handled without errors — graceful empty-state rendering"
-      ],
-      "verification": "Simulate empty responses, test with restricted accounts, inject failure scenarios, select empty RGs, verify graceful error handling and mock fallback with visible indicators"
-    },
-    "observability": {
-      "requirements": [
-        "All Azure API calls logged with timestamp and response status using Python logging (not print)",
-        "All exceptions logged with full exception details to console logs",
-        "Mock fallback activation logged with warning level and triggering reason",
-        "Logs must not contain sensitive data (tokens, full subscription IDs, credentials)"
-      ],
-      "verification": "Review logs during normal runs for structured API records, trigger controlled failures to verify stack traces, force fallback paths to verify warning logs, run log redaction checks"
-    },
-    "maintainability": {
-      "requirements": [
-        "Each module has one clear responsibility (UI, services, Azure clients separated)",
-        "No function exceeds 50 lines of code (excluding comments/blank lines)",
-        "All Azure API calls exist only in app/azure/, not in UI or service layers",
-        "requirements.txt remains minimal with all versions pinned for reproducible builds"
-      ],
-      "verification": "Module boundary review in code review, static checks for function length, grep for Azure SDK imports outside app/azure/, pinned version enforcement in dependency review"
-    }
+    "security": "DefaultAzureCredential only; no credentials in source code; no sensitive data in logs",
+    "performance": "Cached reads under 2 seconds and subscription load under 3 seconds on typical developer machine",
+    "reliability": "Graceful fallback to mock data when Azure calls fail or return no usable data",
+    "observability": "Python logging for API calls, cache source, errors, and fallback reasons"
   },
-
-  "architecture": {
-    "pattern": "Three-layer separation: UI (Streamlit) → Services (business logic) → Azure clients (API wrappers)",
-    "layers": {
-      "ui": {
-        "path": "app/ui/",
-        "responsibility": "Streamlit pages and interactive components only; NO business logic, NO Azure SDK calls",
-        "interaction": "Calls only app/services/ modules; receives dicts/objects with is_mock indicator"
-      },
-      "services": {
-        "path": "app/services/",
-        "responsibility": "Business logic (cost aggregation, usage summaries, sorting, top-N calculations)",
-        "modules": [
-          "cost_service.py - cost calculations, top 5 cost drivers, breakdown by service/type",
-          "usage_service.py - resource counting, grouping by type"
-        ],
-        "interaction": "Calls app/azure/ clients; falls back to mock_data on API failure; returns dicts with is_mock=True/False"
-      },
-      "azure": {
-        "path": "app/azure/",
-        "responsibility": "Thin wrappers around Azure SDK; error handling; mock fallback logic; credential initialization",
-        "modules": [
-          "auth.py - initialize DefaultAzureCredential, handle auth errors",
-          "cost_client.py - CostManagementClient wrapper for cost queries",
-          "resource_client.py - ResourceManagementClient wrapper for resource listing",
-          "subscription_client.py - SubscriptionClient wrapper for subscription listing",
-          "mock_data.py - mock datasets for fallback scenarios"
-        ],
-        "interaction": "Uses DefaultAzureCredential; falls back to mock_data on any failure; logs all calls"
-      }
-    },
-    "fallback_strategy": "Service modules attempt live Azure API calls first. On failure (network error, permission denied, timeout, throttling) or empty response, return mock data with is_mock=True indicator. Mock fallback ensures local dev, demos, and testing work without live Azure access.",
-    "data_scope": {
-      "time_window": "30-day rolling window (fixed in v1)",
-      "granularity": "Resource group level",
-      "operations": "Read-only (list, query, no write operations)",
-      "latency": "Cost data from Azure may be 24-48 hours delayed"
-    }
-  },
-
-  "decisions": {
-    "ADR-001": {
-      "title": "UI Framework — Streamlit",
-      "status": "Accepted",
-      "rationale": "Fast path to working data-focused UI for Python developers; minimal frontend overhead; built-in widgets for filters and charts",
-      "consequences": "Faster delivery but less flexibility for custom UI behavior",
-      "alternatives_rejected": "Flask, Dash, FastAPI + React"
-    },
-    "ADR-002": {
-      "title": "Authentication — DefaultAzureCredential + Azure CLI",
-      "status": "Accepted",
-      "rationale": "No hardcoded credentials; works locally (Azure CLI) and in cloud (managed identity); aligns with existing developer workflows",
-      "consequences": "Improved security; no secret management overhead in code; requires az login locally and Reader RBAC permissions",
-      "alternatives_rejected": "Service principal with client secret in .env, API keys"
-    },
-    "ADR-003": {
-      "title": "Mock Fallback",
-      "status": "Accepted",
-      "rationale": "Azure APIs may fail (network, throttling, permissions, constraints); app remains functional for dev, demos, testing without live access",
-      "consequences": "Increased resilience; reduced user-facing failures; requires clear UI/log indicators to distinguish mock vs. live data",
-      "alternatives_rejected": "Hard errors on API failure, mandatory live Azure access"
-    },
-    "ADR-004": {
-      "title": "Deployment — Azure Container Apps",
-      "status": "Accepted",
-      "rationale": "Serverless container platform; easy scaling; managed identity support; aligns with authentication strategy",
-      "consequences": "Reduced operational overhead; deployment depends on container image discipline",
-      "alternatives_rejected": "Azure App Service, Azure Functions, Azure VMs"
-    },
-    "ADR-005": {
-      "title": "Architecture — Separated Services Layer",
-      "status": "Accepted",
-      "rationale": "Separation of UI, business logic, and API integration improves testability, maintainability, and extensibility",
-      "consequences": "App easier to test (mock services), maintain (single responsibility), and evolve (modular design)",
-      "alternatives_rejected": "Monolithic UI-logic-API entanglement"
-    }
-  },
-
   "assumptions": [
-    "User has run 'az login' and has Reader role on target subscriptions",
-    "Azure Cost Management API is enabled for subscriptions (not always on by default)",
-    "App runs locally via 'streamlit run app/main.py' or in Azure Container Apps with managed identity",
-    "Cost data from Azure may be 24-48 hours delayed — not real-time",
-    "Resource group names are unique within subscription (Azure constraint)",
-    "Network connectivity to Azure APIs available (app falls back gracefully if not)"
+    "User has run az login and has Reader access to target subscriptions",
+    "Azure Cost Management API is enabled and may return delayed data",
+    "App can run locally or in Azure Container Apps with managed identity",
+    "Developers run tests locally without requiring live Azure access"
   ],
-
   "limits": [
-    "Cost data shows last 30 days only — no date range selection in v1",
-    "Read-only operations only — no write/modification operations to Azure",
-    "Single-tenant only — no multi-tenant or cross-tenant support",
-    "No cost forecasting, budget alerts, or predictive analytics",
-    "No CSV/Excel export or other export formats",
-    "No real-time monitoring — data refreshed on manual page reload",
-    "No cost comparison between multiple resource groups"
+    "Cost data shows last 30 days only in v1",
+    "Read-only Azure operations",
+    "Single-tenant support only",
+    "No forecasting or budget alerts"
   ],
-
-  "out_of_scope": {
-    "v1_excluded": [
-      "Budget alerts and budget policy enforcement",
-      "Cost forecasting or predictive analytics",
-      "CSV, Excel, or other export formats",
-      "Real-time monitoring dashboards",
-      "Multi-tenant or cross-tenant support",
-      "Cost comparison between multiple resource groups",
-      "Anomaly detection or alerting on unusual spending patterns",
-      "Chargeback or cost allocation between teams/projects"
-    ]
-  },
-
-  "skills": {
-    "azure-auth": "skills/azure-auth/SKILL.md — When to use: implementing any Azure API call or credential handling; covers DefaultAzureCredential patterns, mocking in tests, avoiding hardcoded credentials",
-    "cost-analysis": "skills/cost-analysis/SKILL.md — When to use: implementing cost data retrieval and processing; covers Cost Management API usage, service/Azure client separation, mock fallback",
-    "usage-analysis": "skills/usage-analysis/SKILL.md — When to use: implementing resource listing and grouping; covers Resource Management API usage, aggregation patterns, empty RG handling",
-    "deployment": "skills/deployment/SKILL.md — When to use: writing Dockerfile, CI/CD pipeline, deploying to Azure Container Apps; covers containerization, GitHub Actions, managed identity config"
-  },
-
-  "agents": {
-    "architect": ".github/agents/architect.agent.md — Design decisions, architecture review, system structure; validates alignment with docs/architecture.md; recommends minimal approaches",
-    "builder": ".github/agents/builder.agent.md — Implementation, code writing; mandatory checklist before writing code; follows skills and architecture; writes service functions, Azure clients, UI components, tests",
-    "qa": ".github/agents/qa.agent.md — Testing, validation, NFR compliance; writes comprehensive pytest tests; validates error handling, edge cases, mock fallback; ensures friendly error messages"
-  },
-
+  "out_of_scope": [
+    "Budget alerts",
+    "Cost forecasting",
+    "CSV or Excel export",
+    "Real-time monitoring",
+    "Cross-tenant support",
+    "Anomaly detection"
+  ],
   "folder_map": {
-    "app/": "Application code (UI, services, Azure clients)",
-    "app/ui/": "Streamlit pages and UI components — interactive widgets only, no business logic",
-    "app/services/": "Business logic layer — cost calculations, usage summaries, aggregations",
-    "app/azure/": "Azure SDK client wrappers — API calls, credential management, mock fallback",
-    "docs/": "Human-readable documentation (outcome, requirements, architecture, NFR, decisions)",
-    "context/": "Machine-readable structured context (this file + app_context.json)",
-    "skills/": "Copilot skill playbooks (domain-specific implementation guides)",
-    "tests/": "Unit tests using pytest (test_cost.py, test_usage.py, test_auth.py)",
-    ".github/": "GitHub-specific files",
-    ".github/agents/": "Custom Copilot agents (architect.agent.md, builder.agent.md, qa.agent.md)",
-    ".github/workflows/": "CI/CD pipelines (test, build, deploy)"
-  },
-
-  "status": {
-    "step_1_define_outcome": "✅ COMPLETE — outcome statement, charter, success criteria",
-    "step_2_generate_context": "✅ COMPLETE — requirements.md, architecture.md, nfr.md, decisions.md",
-    "step_3_define_agents_skills": "✅ COMPLETE — 4 skills created, 3 agents created",
-    "step_4_build_application": "🔄 PENDING — use Builder agent + skills to implement features",
-    "step_5_qa_testing": "🔄 PENDING — use QA agent to write tests and validate NFR",
-    "step_6_cicd_deployment": "🔄 PENDING — GitHub Actions pipeline, Container Apps deployment",
-    "step_7_real_project_workflow": "🔄 PENDING — full end-to-end workflow with all agents",
-    "step_8_governance": "🔄 PENDING — guardrails, standards, compliance checks"
+    "app/ui": "Streamlit pages and UI components",
+    "app/services": "Business logic and local cache repository",
+    "app/azure_api": "Azure SDK wrappers for cost/resource/subscription/auth and mock fallback",
+    "docs": "Human-readable documentation",
+    "context": "Machine-readable structured context and local cache DB",
+    "skills": "Copilot skill playbooks",
+    "tests": "Unit and optional integration/UI tests",
+    ".github/agents": "Custom Copilot agents",
+    ".github/workflows": "CI/CD pipelines and context guard checks"
   }
 }

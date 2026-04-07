@@ -129,3 +129,100 @@ def test_get_cost_summary_logs_fallback_warning(caplog):
         service.get_cost_summary("rg-empty")
 
     assert any("mock fallback" in r.message.lower() for r in caplog.records)
+
+
+# ── Multi-resource-group aggregation ───────────────────────────────────────
+
+def test_get_cost_summary_for_groups_aggregates_live_data():
+    """Aggregates totals and dimensions across selected groups."""
+    service = _make_service(mock_rows=[])
+
+    def fake_get_cost_summary(resource_group_name):
+        if resource_group_name == "rg-a":
+            return {
+                "total_cost": 100.0,
+                "by_service": {"Compute": 70.0, "Storage": 30.0},
+                "by_resource_type": {
+                    "microsoft.compute/virtualmachines": 70.0,
+                    "microsoft.storage/storageaccounts": 30.0,
+                },
+                "top_drivers": [],
+                "is_mock": False,
+            }
+        return {
+            "total_cost": 60.0,
+            "by_service": {"Compute": 10.0, "Networking": 50.0},
+            "by_resource_type": {
+                "microsoft.compute/virtualmachines": 10.0,
+                "microsoft.network/loadbalancers": 50.0,
+            },
+            "top_drivers": [],
+            "is_mock": False,
+        }
+
+    service.get_cost_summary = fake_get_cost_summary
+    result = service.get_cost_summary_for_groups(["rg-a", "rg-b"])
+
+    assert result["is_mock"] is False
+    assert result["total_cost"] == 160.0
+    assert result["by_service"]["Compute"] == 80.0
+    assert result["by_service"]["Networking"] == 50.0
+    assert result["by_service"]["Storage"] == 30.0
+
+
+def test_get_cost_summary_for_groups_skips_mock_group_summaries():
+    """Mock/fallback group summaries are excluded from aggregate totals."""
+    service = _make_service(mock_rows=[])
+
+    def fake_get_cost_summary(resource_group_name):
+        if resource_group_name == "rg-live":
+            return {
+                "total_cost": 40.0,
+                "by_service": {"Compute": 40.0},
+                "by_resource_type": {"microsoft.compute/virtualmachines": 40.0},
+                "top_drivers": [],
+                "is_mock": False,
+            }
+        return {
+            "total_cost": 999.0,
+            "by_service": {"Mock": 999.0},
+            "by_resource_type": {"mock/type": 999.0},
+            "top_drivers": [],
+            "is_mock": True,
+        }
+
+    service.get_cost_summary = fake_get_cost_summary
+    result = service.get_cost_summary_for_groups(["rg-live", "rg-mock"])
+
+    assert result["is_mock"] is False
+    assert result["total_cost"] == 40.0
+    assert "Mock" not in result["by_service"]
+
+
+def test_get_cost_summary_for_groups_returns_mock_if_no_live_data():
+    """If all groups are fallback data, aggregate falls back to mock payload."""
+    service = _make_service(mock_rows=[])
+    service.get_cost_summary = lambda _: {
+        "total_cost": 1.0,
+        "by_service": {"Mock": 1.0},
+        "by_resource_type": {"mock/type": 1.0},
+        "top_drivers": [],
+        "is_mock": True,
+    }
+
+    result = service.get_cost_summary_for_groups(["rg-a", "rg-b"])
+    assert result["is_mock"] is True
+
+
+def test_get_cost_summary_for_groups_empty_input_returns_empty_summary():
+    """No selected groups should return a non-mock empty summary."""
+    service = _make_service(mock_rows=[])
+    result = service.get_cost_summary_for_groups([])
+
+    assert result == {
+        "total_cost": 0.0,
+        "by_service": {},
+        "by_resource_type": {},
+        "top_drivers": [],
+        "is_mock": False,
+    }

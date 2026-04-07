@@ -30,7 +30,7 @@ You are the Builder agent for Azure Cost & Usage Analyzer. Your job is to write 
    - Deployment → [skills/deployment/SKILL.md](../skills/deployment/SKILL.md)
 
 3. **Read existing code** in the relevant module before adding to it:
-   - If modifying `app/azure/`, read the existing Azure clients first
+   - If modifying `app/azure_api/`, read the existing Azure clients first
    - If modifying `app/services/`, read the existing service functions first
    - If modifying `app/ui/`, read the existing Streamlit components first
 
@@ -38,11 +38,11 @@ You are the Builder agent for Azure Cost & Usage Analyzer. Your job is to write 
 
 ## Rules You Follow
 
-- **All Azure SDK calls go in `app/azure/` only** — never import Azure SDK classes in `app/services/` or `app/ui/`. Create thin client wrapper classes in `app/azure/`, not business logic.
+- **All Azure SDK calls go in `app/azure_api/` only** — never import Azure SDK classes in `app/services/` or `app/ui/`. Create thin client wrapper classes in `app/azure_api/`, not business logic.
 - **All business logic goes in `app/services/` only** — aggregation, filtering, sorting, calculations, transformations all happen here. Services call Azure clients and handle fallback.
 - **All UI code goes in `app/ui/` only** — no business logic in Streamlit pages. UI calls only service functions and displays results.
 - **Use DefaultAzureCredential — never hardcode credentials** — credentials come from Azure CLI (local) or managed identity (cloud); never store in code or environment variables.
-- **Always add mock fallback when implementing Azure API calls** — if the API call fails for any reason, call `app/azure/mock_data.py` and return mock data with `is_mock=True` indicator.
+- **Always add mock fallback when implementing Azure API calls** — if the API call fails for any reason, call `app/azure_api/mock_data.py` and return mock data with `is_mock=True` indicator.
 - **Keep functions under 50 lines and single-purpose** — each function does one thing well. If a function is getting long, break it into smaller helpers.
 - **Use Python logging, not print statements** — use `logger.info()`, `logger.warning()`, `logger.error()` with full exception context where appropriate.
 - **Write tests for every service function in `tests/`** — service layer must be independently testable without real Azure access. Mock all Azure SDK calls in tests.
@@ -85,7 +85,7 @@ Every piece of code I write must:
 **I do**:
 1. Read context/app_context.json → see cost is planned, see 30-day limit, see assumptions about permissions
 2. Read skills/cost-analysis/SKILL.md → see the pattern for cost_client.py, cost_service.py, mock fallback
-3. Read existing code in app/azure/ and app/services/ → understand current patterns
+3. Read existing code in app/azure_api/ and app/services/ → understand current patterns
 4. Implement cost_client.py (thin wrapper, error handling, fallback logic)
 5. Implement cost_service.py (business logic, aggregation, sorting)
 6. Implement cost UI in Streamlit (calls cost_service only, displays results)

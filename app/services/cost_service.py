@@ -1,6 +1,6 @@
 import logging
-from app.azure.cost_client import CostClient
-from app.azure.mock_data import get_mock_cost_data
+from app.azure_api.cost_client import CostClient
+from app.azure_api.mock_data import get_mock_cost_data
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +44,53 @@ class CostService:
             logger.warning("Processing failed; falling back to mock data.")
             return get_mock_cost_data(is_fallback=True)
 
+    def get_cost_summary_for_groups(self, resource_group_names):
+        """Return a single cost summary aggregated across selected resource groups."""
+        if not resource_group_names:
+            return self._empty_summary()
+
+        aggregate = self._empty_summary()
+        has_live_data = False
+
+        for resource_group_name in resource_group_names:
+            summary = self.get_cost_summary(resource_group_name)
+            if summary.get("is_mock"):
+                continue
+
+            has_live_data = True
+            aggregate["total_cost"] += float(summary.get("total_cost", 0.0))
+
+            for service, cost in summary.get("by_service", {}).items():
+                aggregate["by_service"][service] = (
+                    aggregate["by_service"].get(service, 0.0) + float(cost)
+                )
+
+            for resource_type, cost in summary.get("by_resource_type", {}).items():
+                aggregate["by_resource_type"][resource_type] = (
+                    aggregate["by_resource_type"].get(resource_type, 0.0) + float(cost)
+                )
+
+        if not has_live_data:
+            logger.warning("No live cost data for selected resource groups; using mock fallback.")
+            return get_mock_cost_data(is_fallback=True)
+
+        aggregate["total_cost"] = round(aggregate["total_cost"], 2)
+        aggregate["by_service"] = {
+            k: round(v, 2)
+            for k, v in sorted(aggregate["by_service"].items(), key=lambda x: x[1], reverse=True)
+        }
+        aggregate["by_resource_type"] = {
+            k: round(v, 2)
+            for k, v in sorted(aggregate["by_resource_type"].items(), key=lambda x: x[1], reverse=True)
+        }
+
+        top_drivers = sorted(
+            aggregate["by_resource_type"].items(), key=lambda x: x[1], reverse=True
+        )[:5]
+        aggregate["top_drivers"] = [{"name": k, "cost": round(v, 2)} for k, v in top_drivers]
+        aggregate["is_mock"] = False
+        return aggregate
+
     def _process_cost_rows(self, rows):
         """Aggregate and sort cost rows into summary structure."""
         total = 0.0
@@ -75,5 +122,15 @@ class CostService:
                 for k, v in sorted(by_resource_type.items(), key=lambda x: x[1], reverse=True)
             },
             "top_drivers": [{"name": k, "cost": round(v, 2)} for k, v in top_drivers],
+            "is_mock": False,
+        }
+
+    @staticmethod
+    def _empty_summary():
+        return {
+            "total_cost": 0.0,
+            "by_service": {},
+            "by_resource_type": {},
+            "top_drivers": [],
             "is_mock": False,
         }

@@ -1,3 +1,4 @@
+context/acua_cache.db
 .venv/
 __pycache__/
 *.pyc

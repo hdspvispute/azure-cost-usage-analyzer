@@ -1,0 +1,26 @@
+# Global fallback owner
+* @hdspvispute
+
+# Architecture and governance
+/docs/architecture.md @hdspvispute
+/docs/decisions.md @hdspvispute
+/docs/nfr.md @hdspvispute
+/docs/governance.md @hdspvispute
+/docs/change-management.md @hdspvispute
+/docs/ownership.md @hdspvispute
+/context/app_context.json @hdspvispute
+
+# Copilot operating model
+/.github/copilot-instructions.md @hdspvispute
+/.github/prompt-catalog.md @hdspvispute
+/.github/agents/* @hdspvispute
+/skills/* @hdspvispute
+
+# Runtime code ownership
+/app/ui/* @hdspvispute
+/app/services/* @hdspvispute
+/app/azure_api/* @hdspvispute
+/tests/* @hdspvispute
+
+# CI/CD
+/.github/workflows/* @hdspvispute

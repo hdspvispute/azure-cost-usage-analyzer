@@ -136,10 +136,97 @@ def test_fallback_warning_is_logged(caplog):
 
 def test_mock_usage_data_schema():
     """get_mock_usage_data returns expected schema."""
-    from app.azure.mock_data import get_mock_usage_data
+    from app.azure_api.mock_data import get_mock_usage_data
     data = get_mock_usage_data(is_fallback=True)
 
     assert data["is_mock"] is True
     assert data["total_count"] > 0
     assert isinstance(data["by_type"], dict)
     assert isinstance(data["resources"], list)
+
+
+# ── Multi-resource-group aggregation ───────────────────────────────────────
+
+def test_get_resource_group_usage_for_groups_aggregates_live_data():
+    """Aggregates counts/resources across selected resource groups."""
+    service = _make_service(resources=[])
+
+    def fake_get_usage(resource_group_name):
+        if resource_group_name == "rg-a":
+            return {
+                "total_count": 2,
+                "by_type": {"Microsoft.Compute/virtualMachines": 2},
+                "resources": [
+                    {"name": "vm-1", "type": "Microsoft.Compute/virtualMachines", "location": "eastus"},
+                    {"name": "vm-2", "type": "Microsoft.Compute/virtualMachines", "location": "eastus2"},
+                ],
+                "is_mock": False,
+            }
+        return {
+            "total_count": 1,
+            "by_type": {"Microsoft.Storage/storageAccounts": 1},
+            "resources": [
+                {"name": "sa-1", "type": "Microsoft.Storage/storageAccounts", "location": "westus"}
+            ],
+            "is_mock": False,
+        }
+
+    service.get_resource_group_usage = fake_get_usage
+    result = service.get_resource_group_usage_for_groups(["rg-a", "rg-b"])
+
+    assert result["is_mock"] is False
+    assert result["total_count"] == 3
+    assert result["by_type"]["Microsoft.Compute/virtualMachines"] == 2
+    assert result["by_type"]["Microsoft.Storage/storageAccounts"] == 1
+    assert {r["resource_group"] for r in result["resources"]} == {"rg-a", "rg-b"}
+
+
+def test_get_resource_group_usage_for_groups_skips_mock_group_summaries():
+    """Mock/fallback group summaries are excluded from aggregate usage."""
+    service = _make_service(resources=[])
+
+    def fake_get_usage(resource_group_name):
+        if resource_group_name == "rg-live":
+            return {
+                "total_count": 1,
+                "by_type": {"Microsoft.Compute/virtualMachines": 1},
+                "resources": [
+                    {"name": "vm-1", "type": "Microsoft.Compute/virtualMachines", "location": "eastus"}
+                ],
+                "is_mock": False,
+            }
+        return {
+            "total_count": 99,
+            "by_type": {"Mock/Type": 99},
+            "resources": [{"name": "mock", "type": "Mock/Type", "location": "nowhere"}],
+            "is_mock": True,
+        }
+
+    service.get_resource_group_usage = fake_get_usage
+    result = service.get_resource_group_usage_for_groups(["rg-live", "rg-mock"])
+
+    assert result["is_mock"] is False
+    assert result["total_count"] == 1
+    assert "Mock/Type" not in result["by_type"]
+
+
+def test_get_resource_group_usage_for_groups_returns_mock_if_no_live_data():
+    """If all groups are fallback data, aggregate falls back to mock payload."""
+    service = _make_service(resources=[])
+    service.get_resource_group_usage = lambda _: {
+        "total_count": 1,
+        "by_type": {"Mock/Type": 1},
+        "resources": [{"name": "mock", "type": "Mock/Type", "location": "nowhere"}],
+        "is_mock": True,
+    }
+
+    result = service.get_resource_group_usage_for_groups(["rg-a", "rg-b"])
+    assert result["is_mock"] is True
+
+
+def test_get_resource_group_usage_for_groups_empty_input_returns_empty_summary():
+    """No selected groups should return a non-mock empty usage summary."""
+    service = _make_service(resources=[])
+    result = service.get_resource_group_usage_for_groups([])
+
+    assert result == {"total_count": 0, "by_type": {}, "resources": [], "is_mock": False}

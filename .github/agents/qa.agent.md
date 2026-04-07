@@ -55,7 +55,7 @@ Always consult:
   1. Happy path (success case with real-looking data)
   2. Empty data case (API returns empty/no data, should handle gracefully)
   3. Error/fallback case (API fails, mock fallback is triggered, errors are logged)
-- **Coverage target: 80%+ of service layer code** — aim for high coverage of `app/services/` and `app/azure/`; UI coverage is lower priority.
+- **Coverage target: 80%+ of service layer code** — aim for high coverage of `app/services/` and `app/azure_api/`; UI coverage is lower priority.
 - **Log assertions** — verify that API calls, errors, and fallbacks are logged at the correct level (`logger.info`, `logger.warning`, `logger.error`).
 - **No sensitive data in test output** — do not commit test files with real subscription IDs, tenant IDs, or credentials.
 
@@ -163,7 +163,7 @@ When reviewing code, verify:
 **Maintainability**:
 - [ ] UI, services, Azure clients in separate modules
 - [ ] Functions under 50 lines
-- [ ] Azure SDK calls only in `app/azure/`
+- [ ] Azure SDK calls only in `app/azure_api/`
 - [ ] requirements.txt pinned to exact versions
 
 ---
